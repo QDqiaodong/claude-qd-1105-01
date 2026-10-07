@@ -1,7 +1,5 @@
 package com.book.store.controller;
 
-import java.util.List;
-
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -14,6 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.book.store.common.ApiResponse;
 import com.book.store.entity.Book;
 import com.book.store.service.BookService;
+import com.book.store.service.BookService.BookPage;
 
 @RestController
 @RequestMapping("/api/books")
@@ -25,10 +24,25 @@ public class BookController {
         this.bookService = bookService;
     }
 
+    /**
+     * 列表：status / keyword / isbn 与分页 page / size 共用同一套过滤规则（见 BookService.buildSpec），
+     * 空参数不参与过滤，刷新或返回列表后结果保持一致。
+     */
     @GetMapping
-    public ApiResponse<List<Book>> list(@RequestParam(required = false) String status,
-                                        @RequestParam(required = false) String keyword) {
-        return ApiResponse.success(bookService.list(status, keyword));
+    public ApiResponse<BookPage> list(@RequestParam(required = false) String status,
+                                      @RequestParam(required = false) String keyword,
+                                      @RequestParam(required = false) String isbn,
+                                      @RequestParam(defaultValue = "1") int page,
+                                      @RequestParam(defaultValue = "10") int size) {
+        return ApiResponse.success(bookService.list(status, keyword, isbn, page, size));
+    }
+
+    /**
+     * 详情：按 id 直查，与列表排序 / 分页无关，销售单明细等入口跳入不会错书。
+     */
+    @GetMapping("/{id}")
+    public ApiResponse<Book> detail(@PathVariable Long id) {
+        return ApiResponse.success(bookService.detail(id));
     }
 
     @PostMapping

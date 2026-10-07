@@ -106,7 +106,7 @@ function fmt(t) {
 
 async function ensureBooks() {
   if (!books.value.length) {
-    books.value = await api.listBooks()
+    books.value = (await api.listBooks({ size: 500 })).records
   }
 }
 

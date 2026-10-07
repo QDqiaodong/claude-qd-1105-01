@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import api from '../api'
+import router from '../router'
 
 const emit = defineEmits(['changed'])
 
@@ -45,17 +46,23 @@ async function selectSale(id) {
   }
 }
 
-function bookTitle(id) {
-  const b = books.value.find((x) => x.id === id)
-  return b ? `${b.title} ¥${b.price}` : `#${id}`
+// 从销售单明细点入图书详情：带的是图书 id，按 id 直查，
+// 与图书列表当前的排序 / 分页 / 过滤条件无关，不会跳错书。
+function goBook(row) {
+  if (row.bookMissing || !row.bookId) {
+    ElMessage.warning(`图书 #${row.bookId ?? '—'} 已删除，无法查看详情`)
+    return
+  }
+  router.push({ path: '/books', query: { focus: String(row.bookId) } })
 }
-function bookPrice(id) {
-  const b = books.value.find((x) => x.id === id)
-  return b ? b.price : 0
+
+function fmtPrice(v) {
+  return v != null ? `¥${Number(v).toFixed(2)}` : '—'
 }
 
 async function openNew() {
-  books.value = await api.listBooks('在售')
+  // 新建弹窗的图书选项仍限「在售」；字典与列表分页接口共用一套过滤规则
+  books.value = (await api.listBooks({ status: '在售', size: 500 })).records
   form.value = { items: [] }
   dialogVisible.value = true
 }
@@ -144,15 +151,27 @@ onMounted(load)
             <span class="muted">总额 ¥{{ (detail.sale.total || 0).toFixed(2) }}</span>
           </div>
           <el-table :data="detail.items" border size="small" style="margin-top:10px">
-            <el-table-column label="图书" min-width="180">
-              <template #default="{ row }">{{ bookTitle(row.bookId) }}</template>
+            <el-table-column label="图书" min-width="200">
+              <template #default="{ row }">
+                <!-- 快照渲染：图书被删 / 字段缺失也能打开详情，不会报错 -->
+                <template v-if="!row.bookMissing">
+                  <el-link type="primary" :underline="false" @click="goBook(row)">
+                    {{ row.bookTitle || ('#' + row.bookId) }}
+                  </el-link>
+                  <span v-if="row.bookIsbn" class="muted"> · ISBN {{ row.bookIsbn }}</span>
+                  <span v-else class="muted"> · 未登记 ISBN</span>
+                </template>
+                <span v-else class="missing-book">图书 #{{ row.bookId }}（已删除）</span>
+              </template>
             </el-table-column>
             <el-table-column prop="qty" label="数量" width="80" />
             <el-table-column label="单价" width="90">
-              <template #default="{ row }">¥{{ bookPrice(row.bookId) }}</template>
+              <template #default="{ row }">{{ fmtPrice(row.bookPrice) }}</template>
             </el-table-column>
             <el-table-column label="小计" width="110">
-              <template #default="{ row }">¥{{ (bookPrice(row.bookId) * (row.qty || 0)).toFixed(2) }}</template>
+              <template #default="{ row }">
+                {{ row.bookPrice != null ? `¥${(Number(row.bookPrice) * (row.qty || 0)).toFixed(2)}` : '—' }}
+              </template>
             </el-table-column>
           </el-table>
           <div class="actions">
@@ -210,4 +229,5 @@ onMounted(load)
 .actions { margin-top: 14px; display: flex; gap: 10px; }
 .items { display: flex; flex-direction: column; gap: 8px; }
 .item-row { display: flex; gap: 8px; align-items: center; }
+.missing-book { color: var(--el-color-danger); font-size: 13px; }
 </style>

@@ -18,7 +18,9 @@ public class Book {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     public Long id;
 
-    @Column(name = "isbn", nullable = false, unique = true, length = 32)
+    // 旧图书数据可能没有 ISBN：允许 NULL（未登记）；唯一性由应用层校验，
+    // 数据库层面故意不加 UNIQUE，以兼容已存在重复 / 空白 ISBN 的旧表数据。
+    @Column(name = "isbn", length = 32)
     public String isbn;
 
     @Column(name = "title", nullable = false, length = 128)

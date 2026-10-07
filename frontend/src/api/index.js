@@ -22,9 +22,20 @@ async function call(promise) {
 const params = (o) => ({ params: o })
 
 export default {
-  // ---------------- 图书（行内编辑） ----------------
-  listBooks: (status, keyword) => call(http.get('/books', params(
-    status ? { status, ...(keyword ? { keyword } : {}) } : (keyword ? { keyword } : {})))),
+  // ---------------- 图书（行内编辑 + ISBN 查询 + 分页 + 详情） ----------------
+  // query: { status, keyword, isbn, page, size }，空值不下发（空值绝不参与匹配）；
+  // 返回 { records, total, page, size, duplicateIsbns }
+  listBooks: (query = {}) => {
+    const q = {}
+    for (const k of ['status', 'keyword', 'isbn']) {
+      const v = query[k]
+      if (v != null && String(v).trim() !== '') q[k] = String(v).trim()
+    }
+    if (query.page) q.page = query.page
+    if (query.size) q.size = query.size
+    return call(http.get('/books', { params: q }))
+  },
+  getBook: (id) => call(http.get(`/books/${id}`)),
   createBook: (d) => call(http.post('/books', d)),
   updateBook: (id, d) => call(http.put(`/books/${id}`, d)),
 

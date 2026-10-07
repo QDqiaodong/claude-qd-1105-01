@@ -1,8 +1,11 @@
 package com.book.store.service;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.springframework.stereotype.Service;
@@ -42,11 +45,44 @@ public class SaleService {
         public List<ItemInput> items;
     }
 
+    /**
+     * 销售明细行 + 图书快照：旧销售单引用的图书可能已被删除、或图书字段（ISBN 等）未登记，
+     * 快照一律可空并以前端显示为空为准，绝不让详情接口因此报错。
+     */
+    public static class SaleItemView {
+        public Long id;
+        public Long saleId;
+        public Long bookId;
+        public Integer qty;
+        /** 图书是否已不存在（被删除） */
+        public boolean bookMissing;
+        public String bookTitle;
+        public String bookIsbn;
+        public BigDecimal bookPrice;
+        public String bookStatus;
+
+        public static SaleItemView of(SaleItem it, Book book) {
+            SaleItemView v = new SaleItemView();
+            v.id = it.id;
+            v.saleId = it.saleId;
+            v.bookId = it.bookId;
+            v.qty = it.qty;
+            v.bookMissing = (book == null);
+            if (book != null) {
+                v.bookTitle = book.title;
+                v.bookIsbn = book.isbn;
+                v.bookPrice = book.price;
+                v.bookStatus = book.status;
+            }
+            return v;
+        }
+    }
+
     public static class SaleDetail {
         public Sale sale;
-        public List<SaleItem> items;
+        public List<SaleItemView> items;
 
-        public SaleDetail(Sale sale, List<SaleItem> items) {
+        public SaleDetail(Sale sale, List<SaleItemView> items) {
             this.sale = sale;
             this.items = items;
         }
@@ -62,7 +98,25 @@ public class SaleService {
 
     public SaleDetail detail(Long id) {
         Sale sale = saleRepository.findById(id).orElseThrow(() -> new BizException("销售单不存在"));
-        return new SaleDetail(sale, saleItemRepository.findBySaleId(id));
+        List<SaleItem> items = saleItemRepository.findBySaleId(id);
+        // 批量取明细引用到的图书；已删除的图书不在结果中，对应行标记 bookMissing
+        Set<Long> bookIds = new HashSet<>();
+        for (SaleItem it : items) {
+            if (it.bookId != null) {
+                bookIds.add(it.bookId);
+            }
+        }
+        Map<Long, Book> books = new HashMap<>();
+        if (!bookIds.isEmpty()) {
+            for (Book b : bookRepository.findAllById(bookIds)) {
+                books.put(b.id, b);
+            }
+        }
+        List<SaleItemView> views = new ArrayList<>();
+        for (SaleItem it : items) {
+            views.add(SaleItemView.of(it, books.get(it.bookId)));
+        }
+        return new SaleDetail(sale, views);
     }
 
     // ---------------- 新建 / 编辑 ----------------

@@ -34,7 +34,7 @@ async function loadCounts() {
       api.listBooks(), api.listSuppliers(), api.listPurchases(), api.listSales()
     ])
     counts.value = {
-      '/books': b.length,
+      '/books': b.total,
       '/suppliers': s.length,
       '/purchases': p.length,
       '/sales': sa.length
