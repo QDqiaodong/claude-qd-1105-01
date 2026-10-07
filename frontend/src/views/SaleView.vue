@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import router from '../router'
 import api from '../api'
 
 const emit = defineEmits(['changed'])
@@ -17,6 +18,20 @@ const form = ref({ items: [] })
 
 const STATUS_TAG = { '草稿': 'info', '已结账': 'success', '已退款': 'warning' }
 
+// 明细加载竞态防护：快速连点销售单时，只采纳最后一次选择的明细结果
+let detailSeq = 0
+
+async function loadDetail(id) {
+  const my = ++detailSeq
+  try {
+    const d = await api.getSale(id)
+    if (my !== detailSeq) return // 已选中其他单，丢弃过期结果
+    detail.value = d
+  } catch (e) {
+    if (my === detailSeq) ElMessage.error(e.message)
+  }
+}
+
 async function load() {
   loading.value = true
   try {
@@ -25,7 +40,7 @@ async function load() {
       selectedId.value = sales.value[0].id
     }
     if (selectedId.value) {
-      detail.value = await api.getSale(selectedId.value)
+      await loadDetail(selectedId.value)
     } else {
       detail.value = null
     }
@@ -38,20 +53,27 @@ async function load() {
 
 async function selectSale(id) {
   selectedId.value = id
-  try {
-    detail.value = await api.getSale(id)
-  } catch (e) {
-    ElMessage.error(e.message)
-  }
+  await loadDetail(id)
 }
 
-function bookTitle(id) {
-  const b = books.value.find((x) => x.id === id)
-  return b ? `${b.title} ¥${b.price}` : `#${id}`
+// 从销售明细跳入图书详情：按图书主键定位，与图书列表的排序 / 分页无关，
+// 必定落到同一本书；图书档案缺失（旧数据）时明确提示、不跳转
+function goBook(row) {
+  if (!row.book) {
+    ElMessage.warning('该明细的图书档案已缺失，无法查看详情')
+    return
+  }
+  router.push(`/books/${row.bookId}`)
 }
-function bookPrice(id) {
-  const b = books.value.find((x) => x.id === id)
-  return b ? b.price : 0
+
+function fmtPrice(p) {
+  return p != null ? `¥${Number(p).toFixed(2)}` : '—'
+}
+
+function fmtSubtotal(row) {
+  return row.book && row.book.price != null
+    ? `¥${(Number(row.book.price) * (row.qty || 0)).toFixed(2)}`
+    : '—'
 }
 
 async function openNew() {
@@ -144,15 +166,26 @@ onMounted(load)
             <span class="muted">总额 ¥{{ (detail.sale.total || 0).toFixed(2) }}</span>
           </div>
           <el-table :data="detail.items" border size="small" style="margin-top:10px">
-            <el-table-column label="图书" min-width="180">
-              <template #default="{ row }">{{ bookTitle(row.bookId) }}</template>
+            <el-table-column label="图书" min-width="200">
+              <template #default="{ row }">
+                <template v-if="row.book">
+                  <div>{{ row.book.title }}</div>
+                  <div class="book-sub">ISBN {{ row.book.isbn || '未登记' }}</div>
+                </template>
+                <span v-else class="book-sub">图书档案缺失（#{{ row.bookId }}）</span>
+              </template>
             </el-table-column>
             <el-table-column prop="qty" label="数量" width="80" />
-            <el-table-column label="单价" width="90">
-              <template #default="{ row }">¥{{ bookPrice(row.bookId) }}</template>
+            <el-table-column label="单价" width="100">
+              <template #default="{ row }">{{ row.book ? fmtPrice(row.book.price) : '—' }}</template>
             </el-table-column>
             <el-table-column label="小计" width="110">
-              <template #default="{ row }">¥{{ (bookPrice(row.bookId) * (row.qty || 0)).toFixed(2) }}</template>
+              <template #default="{ row }">{{ fmtSubtotal(row) }}</template>
+            </el-table-column>
+            <el-table-column label="操作" width="100">
+              <template #default="{ row }">
+                <el-button type="primary" link size="small" :disabled="!row.book" @click="goBook(row)">查看图书</el-button>
+              </template>
             </el-table-column>
           </el-table>
           <div class="actions">
@@ -207,6 +240,7 @@ onMounted(load)
 .detail { flex: 1; min-width: 0; background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
 .detail-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-weight: 600; }
 .muted { color: var(--muted); font-weight: 400; font-size: 13px; }
+.book-sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
 .actions { margin-top: 14px; display: flex; gap: 10px; }
 .items { display: flex; flex-direction: column; gap: 8px; }
 .item-row { display: flex; gap: 8px; align-items: center; }

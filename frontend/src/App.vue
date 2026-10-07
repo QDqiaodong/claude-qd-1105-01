@@ -4,6 +4,7 @@ import router from './router'
 import api from './api'
 
 import BookView from './views/BookView.vue'
+import BookDetailView from './views/BookDetailView.vue'
 import SupplierView from './views/SupplierView.vue'
 import PurchaseView from './views/PurchaseView.vue'
 import SaleView from './views/SaleView.vue'
@@ -11,6 +12,7 @@ import SaleView from './views/SaleView.vue'
 // ------------------------------------------------------------------
 // 导航形态：左侧竖排导航（el-menu vertical）。
 // 4 个业务模块：图书 / 供应商 / 进货单 / 销售单。
+// 图书详情（/books/:id）不在导航里，由图书列表 / 销售单明细跳入。
 // ------------------------------------------------------------------
 
 const modules = [
@@ -23,10 +25,16 @@ const modules = [
 const currentPath = ref(router.currentRoute.value.path)
 const counts = ref({})
 
+const isBookDetail = computed(() => router.currentRoute.value.name === 'book-detail')
+
 const currentView = computed(() => {
+  if (isBookDetail.value) return BookDetailView
   const m = modules.find((mm) => mm.path === currentPath.value)
   return m ? m.comp : BookView
 })
+
+// 详情页高亮「图书」导航项
+const activePath = computed(() => (isBookDetail.value ? '/books' : currentPath.value))
 
 async function loadCounts() {
   try {
@@ -47,6 +55,7 @@ function go(path) {
 }
 
 function titleOf(path) {
+  if (isBookDetail.value) return '图书详情'
   const m = modules.find((mm) => mm.path === path)
   return m ? m.label : ''
 }
@@ -72,7 +81,7 @@ onMounted(async () => {
       </div>
 
       <el-menu
-        :default-active="currentPath"
+        :default-active="activePath"
         class="nav"
         @select="go"
       >

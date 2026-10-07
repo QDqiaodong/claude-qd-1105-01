@@ -25,9 +25,11 @@ DROP TABLE IF EXISTS supplier;
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- ---------------- 图书 ----------------
+-- isbn 可空：旧图书数据可能没有 ISBN（页面显示「未登记」，不参与 ISBN 查询）；
+-- 唯一索引保留，MySQL 唯一索引允许多个 NULL。
 CREATE TABLE book (
     id         BIGINT AUTO_INCREMENT PRIMARY KEY,
-    isbn       VARCHAR(32) NOT NULL UNIQUE COMMENT 'ISBN',
+    isbn       VARCHAR(32) UNIQUE COMMENT 'ISBN（旧数据可空）',
     title      VARCHAR(128) NOT NULL COMMENT '书名',
     author     VARCHAR(64)  COMMENT '作者',
     price      DECIMAL(10,2) NOT NULL COMMENT '定价',
@@ -124,7 +126,9 @@ INSERT INTO book (isbn, title, author, price, stock, status, created_at) VALUES
 ('9787020000059', '百年孤独',   '马尔克斯', 39.80,   0, '下架', UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 50 DAY),
 ('9787020000066', '三体',       '刘慈欣',   88.00, 200, '在售', UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 45 DAY),
 ('9787020000073', '活着',       '余华',     35.00,  60, '在售', UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 40 DAY),
-('9787020000080', '小王子',     '圣埃克苏佩里', 29.90, 5, '在售', UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 35 DAY);
+('9787020000080', '小王子',     '圣埃克苏佩里', 29.90, 5, '在售', UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 35 DAY),
+-- 旧数据：无 ISBN 的老书（isbn 为 NULL），用于验证缺失值显示与「不参与 ISBN 查询」
+(NULL, '老版连环画', '佚名', 12.00, 3, '在售', UTC_TIMESTAMP() + INTERVAL 8 HOUR - INTERVAL 90 DAY);
 
 -- 进货单：p1、p2 已入库；p3 草稿（挂在已停用供应商 4 名下：关系保留、可补明细，但入库会被整单拒绝）；p4 已作废（异常态）
 INSERT INTO purchase (supplier_id, total, status, created_at) VALUES

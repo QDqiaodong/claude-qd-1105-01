@@ -1,8 +1,11 @@
 package com.book.store.service;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.springframework.stereotype.Service;
@@ -42,11 +45,30 @@ public class SaleService {
         public List<ItemInput> items;
     }
 
+    /**
+     * 销售明细视图：明细字段之外带上图书实时信息（书名/ISBN/定价/状态），
+     * 供页面展示与「查看图书」跳转。图书档案缺失（旧数据）时 book 为 null，
+     * 页面显示为空而不是让详情报错。
+     */
+    public static class SaleItemView {
+        public Long id;
+        public Long bookId;
+        public Integer qty;
+        public Book book;
+
+        public SaleItemView(SaleItem item, Book book) {
+            this.id = item.id;
+            this.bookId = item.bookId;
+            this.qty = item.qty;
+            this.book = book;
+        }
+    }
+
     public static class SaleDetail {
         public Sale sale;
-        public List<SaleItem> items;
+        public List<SaleItemView> items;
 
-        public SaleDetail(Sale sale, List<SaleItem> items) {
+        public SaleDetail(Sale sale, List<SaleItemView> items) {
             this.sale = sale;
             this.items = items;
         }
@@ -62,7 +84,23 @@ public class SaleService {
 
     public SaleDetail detail(Long id) {
         Sale sale = saleRepository.findById(id).orElseThrow(() -> new BizException("销售单不存在"));
-        return new SaleDetail(sale, saleItemRepository.findBySaleId(id));
+        List<SaleItem> items = saleItemRepository.findBySaleId(id);
+        // 批量取明细引用的图书；引用了已不存在图书的旧明细，book 置 null，不阻塞详情打开
+        Set<Long> bookIds = new HashSet<>();
+        for (SaleItem it : items) {
+            if (it.bookId != null) {
+                bookIds.add(it.bookId);
+            }
+        }
+        Map<Long, Book> books = new HashMap<>();
+        for (Book b : bookRepository.findAllById(bookIds)) {
+            books.put(b.id, b);
+        }
+        List<SaleItemView> views = new ArrayList<>(items.size());
+        for (SaleItem it : items) {
+            views.add(new SaleItemView(it, it.bookId == null ? null : books.get(it.bookId)));
+        }
+        return new SaleDetail(sale, views);
     }
 
     // ---------------- 新建 / 编辑 ----------------

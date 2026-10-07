@@ -3,16 +3,24 @@ package com.book.store.service;
 import java.math.BigDecimal;
 import java.util.List;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.book.store.common.BizException;
 import com.book.store.common.Dict;
+import com.book.store.common.PageResult;
 import com.book.store.entity.Book;
 import com.book.store.repository.BookRepository;
+import com.book.store.repository.BookSpecifications;
 
 @Service
 public class BookService {
+
+    /** 分页上限：防止超大 size 拖垮查询 */
+    private static final int MAX_PAGE_SIZE = 200;
 
     private final BookRepository bookRepository;
 
@@ -20,14 +28,32 @@ public class BookService {
         this.bookRepository = bookRepository;
     }
 
-    public List<Book> list(String status, String keyword) {
-        if (status != null && !status.isBlank()) {
-            return bookRepository.findByStatus(status);
-        }
-        if (keyword != null && !keyword.isBlank()) {
-            return bookRepository.findByTitleContainingOrAuthorContainingOrIsbnContaining(keyword, keyword, keyword);
-        }
-        return bookRepository.findAll();
+    /**
+     * 不分页列表（供导航计数、下拉选择等场景）。与分页查询共用同一套过滤规则。
+     * 统一按 id 排序：任何筛选/分页组合下结果顺序稳定，不会因排序漂移跳错书。
+     */
+    public List<Book> list(String status, String keyword, String isbn) {
+        return bookRepository.findAll(BookSpecifications.of(status, keyword, isbn), Sort.by("id"));
+    }
+
+    /**
+     * 分页查询：内容与总数走同一个 Specification，过滤规则与不分页列表完全一致。
+     */
+    public PageResult<Book> page(String status, String keyword, String isbn, Integer page, Integer size) {
+        int p = (page == null || page < 1) ? 1 : page;
+        int s = (size == null || size < 1) ? 10 : Math.min(size, MAX_PAGE_SIZE);
+        Page<Book> result = bookRepository.findAll(
+                BookSpecifications.of(status, keyword, isbn),
+                PageRequest.of(p - 1, s, Sort.by("id")));
+        return new PageResult<>(result.getContent(), result.getTotalElements(), p, s);
+    }
+
+    /**
+     * 详情：只按主键定位。从列表 / 销售单明细跳转时都带 id，
+     * 与列表排序、分页无关，必定落到同一本书。
+     */
+    public Book get(Long id) {
+        return bookRepository.findById(id).orElseThrow(() -> new BizException("图书不存在"));
     }
 
     @Transactional
@@ -35,7 +61,8 @@ public class BookService {
         if (input.isbn == null || input.isbn.isBlank()) {
             throw new BizException("ISBN 不能为空");
         }
-        if (bookRepository.findByIsbn(input.isbn) != null) {
+        String isbn = input.isbn.trim();
+        if (!bookRepository.findAllByIsbn(isbn).isEmpty()) {
             throw new BizException("ISBN 已存在，不可重复");
         }
         if (input.title == null || input.title.isBlank()) {
@@ -48,7 +75,7 @@ public class BookService {
             throw new BizException("库存不能为负数");
         }
         Book book = new Book();
-        book.isbn = input.isbn;
+        book.isbn = isbn;
         book.title = input.title;
         book.author = input.author;
         book.price = input.price;
@@ -62,14 +89,18 @@ public class BookService {
     public Book update(Long id, Book input) {
         Book book = bookRepository.findById(id).orElseThrow(() -> new BizException("图书不存在"));
         if (input.isbn != null) {
-            if (input.isbn.isBlank()) {
-                throw new BizException("ISBN 不能为空");
+            String isbn = input.isbn.trim();
+            if (isbn.isEmpty()) {
+                // 允许清空为「未登记」（兼容无 ISBN 的旧数据）；置空后不参与 ISBN 查询
+                book.isbn = null;
+            } else {
+                boolean duplicated = bookRepository.findAllByIsbn(isbn).stream()
+                        .anyMatch(b -> !b.id.equals(id));
+                if (duplicated) {
+                    throw new BizException("ISBN 已存在，不可重复");
+                }
+                book.isbn = isbn;
             }
-            Book other = bookRepository.findByIsbn(input.isbn);
-            if (other != null && !other.id.equals(id)) {
-                throw new BizException("ISBN 已存在，不可重复");
-            }
-            book.isbn = input.isbn;
         }
         if (input.title != null) {
             if (input.title.isBlank()) {

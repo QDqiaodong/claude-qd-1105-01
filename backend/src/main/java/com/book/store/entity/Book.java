@@ -18,7 +18,12 @@ public class Book {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     public Long id;
 
-    @Column(name = "isbn", nullable = false, unique = true, length = 32)
+    /**
+     * ISBN 可空：旧图书数据可能没有 ISBN（迁移脚本会把旧表的 isbn 列放宽为可空）。
+     * 唯一索引仍保留，MySQL 唯一索引允许多个 NULL，互不影响；
+     * 为 NULL 的图书不参与 ISBN 查询，页面显示「未登记」。
+     */
+    @Column(name = "isbn", unique = true, length = 32)
     public String isbn;
 
     @Column(name = "title", nullable = false, length = 128)

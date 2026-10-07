@@ -23,8 +23,22 @@ const params = (o) => ({ params: o })
 
 export default {
   // ---------------- 图书（行内编辑） ----------------
-  listBooks: (status, keyword) => call(http.get('/books', params(
-    status ? { status, ...(keyword ? { keyword } : {}) } : (keyword ? { keyword } : {})))),
+  // 不分页列表（计数 / 下拉选择）：与分页查询共用同一套过滤参数
+  listBooks: (status, keyword, isbn) => call(http.get('/books', params({
+    ...(status ? { status } : {}),
+    ...(keyword ? { keyword } : {}),
+    ...(isbn ? { isbn } : {})
+  }))),
+  // 分页查询：返回 { list, total, page, size }，过滤规则与不分页列表一致
+  pageBooks: ({ status, keyword, isbn, page, size }) => call(http.get('/books', params({
+    ...(status ? { status } : {}),
+    ...(keyword ? { keyword } : {}),
+    ...(isbn ? { isbn } : {}),
+    page,
+    size
+  }))),
+  // 图书详情：按主键定位，与列表排序 / 分页无关
+  getBook: (id) => call(http.get(`/books/${id}`)),
   createBook: (d) => call(http.post('/books', d)),
   updateBook: (id, d) => call(http.put(`/books/${id}`, d)),
 
